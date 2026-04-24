@@ -4,8 +4,12 @@ Train CVSurrogate on cardiovascular simulation data.
 Prerequisites:
     - Run compute_stats.py first to produce norm_stats.json.
     - manifest_train.json must exist one level above DATA_DIR.
+
+Dry-run (smoke-test, finishes in seconds):
+    python train.py --dry-run
 """
 
+import argparse
 import json
 from pathlib import Path
 
@@ -34,6 +38,7 @@ WEIGHT_DECAY = 1e-5
 GRAD_CLIP    = 1.0
 N_EPOCHS     = 10
 NUM_WORKERS  = 16
+DRY_RUN_SIMS = 128
 
 
 # ─── Epoch runner ────────────────────────────────────────────────────────────
@@ -81,6 +86,11 @@ def run_epoch(model, loader, loss_fn, device, optimizer=None, scheduler=None):
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Smoke-test: tiny dataset, 1 epoch, 0 workers")
+    args = parser.parse_args()
+
     # ── Prerequisites ──────────────────────────────────────────────────
     if not STATS_PATH.exists():
         raise FileNotFoundError(
@@ -95,13 +105,15 @@ def main() -> None:
     # ── Load manifest and slice first N_SIMS entries ───────────────────
     with open(MANIFEST_PATH) as f:
         manifest = json.load(f)
-    index = manifest["index"][:N_SIMS]
+    n_sims = DRY_RUN_SIMS if args.dry_run else N_SIMS
+    index  = manifest["index"][:n_sims]
     print(f"Manifest: {len(index):,} entries selected")
 
     # Sequential split: first N_VAL -> val, remainder -> train.
     # DataLoader shuffle handles randomisation within the train split.
-    val_index   = index[:N_VAL]
-    train_index = index[N_VAL:]
+    n_val       = len(index) // 2 if args.dry_run else N_VAL
+    val_index   = index[:n_val]
+    train_index = index[n_val:]
     print(f"  train: {len(train_index):,}   val: {len(val_index):,}")
 
     # ── Datasets and loaders ───────────────────────────────────────────
@@ -109,10 +121,10 @@ def main() -> None:
     val_ds   = CVDataset(DATA_DIR, val_index,   stats)
 
     loader_kwargs = dict(
-        batch_size        = BATCH_SIZE,
-        num_workers       = NUM_WORKERS,
-        pin_memory        = True,
-        persistent_workers= True,
+        batch_size         = BATCH_SIZE,
+        num_workers        = 0 if args.dry_run else NUM_WORKERS,
+        pin_memory         = True,
+        persistent_workers = False if args.dry_run else True,
     )
     train_loader = DataLoader(train_ds, shuffle=True,  **loader_kwargs)
     val_loader   = DataLoader(val_ds,   shuffle=False, **loader_kwargs)
@@ -141,7 +153,8 @@ def main() -> None:
     print(f"\n{hdr}")
     print("-" * len(hdr))
 
-    for epoch in range(1, N_EPOCHS + 1):
+    n_epochs = 1 if args.dry_run else N_EPOCHS
+    for epoch in range(1, n_epochs + 1):
         t_total, t_cont, t_valve = run_epoch(
             model, train_loader, loss_fn, device, optimizer, scheduler
         )
