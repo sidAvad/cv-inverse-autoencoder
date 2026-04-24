@@ -1,0 +1,17 @@
+sync:
+  test:
+    alpha: "/Users/sa4604"
+    beta: "sa4604@palladium:/home/sa4604"
+    ignore:
+      paths:
+        - ".vscode-server"
+        - ".cache"
+        - ".local"
+        - ".npm"
+        - ".nvm"
+        - ".mutagen"
+        - "vim-master"
+        - "node_modules"
+        - ".git"
+        - "__pycache__"
+        - "*.pyc"
