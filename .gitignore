@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 *.pt
 norm_stats.json
+logs/
+checkpoints/
+.DS_Store

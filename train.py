@@ -11,6 +11,8 @@ Dry-run (smoke-test, finishes in seconds):
 
 import argparse
 import json
+import sys
+from datetime import datetime
 from pathlib import Path
 
 import torch
@@ -39,6 +41,30 @@ GRAD_CLIP    = 1.0
 N_EPOCHS     = 10
 NUM_WORKERS  = 16
 DRY_RUN_SIMS = 128
+
+
+# ─── Logging ─────────────────────────────────────────────────────────────────
+
+class _Tee:
+    def __init__(self, *streams):
+        self._streams = streams
+    def write(self, data):
+        for s in self._streams:
+            s.write(data)
+    def flush(self):
+        for s in self._streams:
+            s.flush()
+
+LOG_DIR        = Path("logs")
+CHECKPOINT_DIR = Path("checkpoints")
+
+def setup_logging(dry_run: bool) -> None:
+    LOG_DIR.mkdir(exist_ok=True)
+    tag = "dry_run" if dry_run else datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_path = LOG_DIR / f"train_{tag}.log"
+    log_file = open(log_path, "w", buffering=1)
+    sys.stdout = _Tee(sys.__stdout__, log_file)
+    print(f"Logging to {log_path}")
 
 
 # ─── Epoch runner ────────────────────────────────────────────────────────────
@@ -90,6 +116,7 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true",
                         help="Smoke-test: tiny dataset, 1 epoch, 0 workers")
     args = parser.parse_args()
+    setup_logging(args.dry_run)
 
     # ── Prerequisites ──────────────────────────────────────────────────
     if not STATS_PATH.exists():
@@ -139,12 +166,13 @@ def main() -> None:
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Trainable parameters: {n_params:,}")
 
+    n_epochs  = 2 if args.dry_run else N_EPOCHS
     optimizer = AdamW(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
     scheduler = OneCycleLR(
         optimizer,
         max_lr           = LR,
         steps_per_epoch  = len(train_loader),
-        epochs           = N_EPOCHS,
+        epochs           = n_epochs,
     )
 
     # ── Training loop ──────────────────────────────────────────────────
@@ -152,8 +180,6 @@ def main() -> None:
            f"  {'Val':>10} {'V-cont':>10} {'V-valve':>10}")
     print(f"\n{hdr}")
     print("-" * len(hdr))
-
-    n_epochs = 1 if args.dry_run else N_EPOCHS
     for epoch in range(1, n_epochs + 1):
         t_total, t_cont, t_valve = run_epoch(
             model, train_loader, loss_fn, device, optimizer, scheduler
@@ -167,6 +193,7 @@ def main() -> None:
             f"  {v_total:>10.6f} {v_cont:>10.6f} {v_valve:>10.6f}"
         )
 
+        CHECKPOINT_DIR.mkdir(exist_ok=True)
         torch.save(
             {
                 "epoch":           epoch,
@@ -174,7 +201,7 @@ def main() -> None:
                 "optimizer_state": optimizer.state_dict(),
                 "val_loss":        v_total,
             },
-            f"checkpoint_epoch{epoch:02d}.pt",
+            CHECKPOINT_DIR / f"checkpoint_epoch{epoch:02d}.pt",
         )
 
     train_ds.close()
