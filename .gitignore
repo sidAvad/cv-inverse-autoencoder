@@ -5,4 +5,5 @@ __pycache__/
 norm_stats.json
 logs/
 checkpoints/
+notebooks/
 .DS_Store

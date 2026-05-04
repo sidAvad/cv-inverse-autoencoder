@@ -37,6 +37,10 @@ Saves `checkpoint_epochNN.pt` after each epoch.
 
 **`CVDataset`** (`dataset.py`): lazy-opens HDF5 handles per worker process (safe for `fork`-based `DataLoader` multiprocessing). Parameters are z-scored; continuous waveforms are z-scored per channel across sims × time; valve signals are raw `{0, 1}`.
 
+## Git conventions
+
+- Never add `Co-Authored-By: Claude` or any AI authorship trailer to commit messages.
+
 ## Key constants
 
 | Symbol | Value | Meaning |
