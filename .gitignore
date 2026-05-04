@@ -6,4 +6,5 @@ norm_stats.json
 logs/
 checkpoints/
 notebooks/
+results/**/*.svg
 .DS_Store
