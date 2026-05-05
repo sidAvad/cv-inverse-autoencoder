@@ -7,4 +7,5 @@ logs/
 checkpoints/
 notebooks/
 results/**/*.svg
+results/provenance.log
 .DS_Store
