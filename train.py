@@ -58,10 +58,10 @@ class _Tee:
 LOG_DIR        = Path("logs")
 CHECKPOINT_DIR = Path("checkpoints")
 
-def setup_logging(dry_run: bool) -> None:
+def setup_logging(run_name: str) -> None:
     LOG_DIR.mkdir(exist_ok=True)
-    tag = "dry_run" if dry_run else datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_path = LOG_DIR / f"train_{tag}.log"
+    tag = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_path = LOG_DIR / f"train_{run_name}_{tag}.log"
     log_file = open(log_path, "w", buffering=1)
     sys.stdout = _Tee(sys.__stdout__, log_file)
     print(f"Logging to {log_path}")
@@ -113,16 +113,20 @@ def run_epoch(model, loader, loss_fn, device, optimizer=None, scheduler=None):
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--run-name", required=True,
+                        help="Name for this run. Checkpoints go to checkpoints/<run-name>/, "
+                             "log to logs/train_<run-name>_<timestamp>.log.")
     parser.add_argument("--dry-run", action="store_true",
-                        help="Smoke-test: tiny dataset, 1 epoch, 0 workers")
+                        help="Smoke-test: tiny dataset, 1 epoch, 0 workers.")
     parser.add_argument("--resume", type=Path, default=None, metavar="CHECKPOINT",
                         help="Resume training from this checkpoint .pt file.")
     parser.add_argument("--n-epochs", type=int, default=None,
-                        help="Total epochs to train (default: N_EPOCHS). "
-                             "When resuming, counts from epoch 1 so set this to "
-                             "the desired final epoch number.")
+                        help="Number of epochs to train (default: N_EPOCHS). "
+                             "When resuming, this is additional epochs on top of the checkpoint.")
     args = parser.parse_args()
-    setup_logging(args.dry_run)
+    setup_logging(args.run_name)
+
+    print(f"Run: {args.run_name}")
 
     # ── Prerequisites ──────────────────────────────────────────────────
     if not STATS_PATH.exists():
@@ -202,15 +206,17 @@ def main() -> None:
             f"  {v_total:>10.6f} {v_cont:>10.6f} {v_valve:>10.6f}"
         )
 
-        CHECKPOINT_DIR.mkdir(exist_ok=True)
+        ckpt_dir = CHECKPOINT_DIR / args.run_name
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
         torch.save(
             {
                 "epoch":           epoch,
+                "run_name":        args.run_name,
                 "model_state":     model.state_dict(),
                 "optimizer_state": optimizer.state_dict(),
                 "val_loss":        v_total,
             },
-            CHECKPOINT_DIR / f"checkpoint_epoch{epoch:03d}.pt",
+            ckpt_dir / f"checkpoint_{epoch:03d}.pt",
         )
 
     train_ds.close()
