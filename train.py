@@ -18,7 +18,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import OneCycleLR
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
 
 from dataset import CVDataset
@@ -115,6 +115,12 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true",
                         help="Smoke-test: tiny dataset, 1 epoch, 0 workers")
+    parser.add_argument("--resume", type=Path, default=None, metavar="CHECKPOINT",
+                        help="Resume training from this checkpoint .pt file.")
+    parser.add_argument("--n-epochs", type=int, default=None,
+                        help="Total epochs to train (default: N_EPOCHS). "
+                             "When resuming, counts from epoch 1 so set this to "
+                             "the desired final epoch number.")
     args = parser.parse_args()
     setup_logging(args.dry_run)
 
@@ -166,21 +172,24 @@ def main() -> None:
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Trainable parameters: {n_params:,}")
 
-    n_epochs  = 2 if args.dry_run else N_EPOCHS
-    optimizer = AdamW(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
-    scheduler = OneCycleLR(
-        optimizer,
-        max_lr           = LR,
-        steps_per_epoch  = len(train_loader),
-        epochs           = n_epochs,
-    )
+    n_epochs    = 1 if args.dry_run else (args.n_epochs or N_EPOCHS)
+    start_epoch = 1
+    optimizer   = AdamW(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
+    scheduler   = CosineAnnealingLR(optimizer, T_max=n_epochs, eta_min=LR / 100)
+
+    if args.resume:
+        ckpt = torch.load(args.resume, map_location=device)
+        model.load_state_dict(ckpt["model_state"])
+        optimizer.load_state_dict(ckpt["optimizer_state"])
+        start_epoch = ckpt["epoch"] + 1
+        print(f"Resumed from {args.resume} (epoch {ckpt['epoch']}, val_loss={ckpt['val_loss']:.6f})")
 
     # ── Training loop ──────────────────────────────────────────────────
     hdr = (f"{'Epoch':<6} {'Train':>10} {'T-cont':>10} {'T-valve':>10}"
            f"  {'Val':>10} {'V-cont':>10} {'V-valve':>10}")
     print(f"\n{hdr}")
     print("-" * len(hdr))
-    for epoch in range(1, n_epochs + 1):
+    for epoch in range(start_epoch, start_epoch + n_epochs):
         t_total, t_cont, t_valve = run_epoch(
             model, train_loader, loss_fn, device, optimizer, scheduler
         )
@@ -201,7 +210,7 @@ def main() -> None:
                 "optimizer_state": optimizer.state_dict(),
                 "val_loss":        v_total,
             },
-            CHECKPOINT_DIR / f"checkpoint_epoch{epoch:02d}.pt",
+            CHECKPOINT_DIR / f"checkpoint_epoch{epoch:03d}.pt",
         )
 
     train_ds.close()
