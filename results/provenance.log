@@ -2,3 +2,4 @@
 2026-05-04 15:00:26  results/surrogate_perf/plot_per_channel_mae.py  →  /home/sa4604/CV-surrogate/results/surrogate_perf/per_channel_mae.svg
 2026-05-04 15:00:30  results/surrogate_perf/plot_waveforms.py  →  /home/sa4604/CV-surrogate/results/surrogate_perf/waveforms_cont.svg
 2026-05-04 15:00:30  results/surrogate_perf/plot_waveforms.py  →  /home/sa4604/CV-surrogate/results/surrogate_perf/waveforms_valve.svg
+2026-05-05 07:13:25  git=729620b (dirty)  script_sha=265dcd1e87  results/loss_curves/plot_loss_curves.py  →  /home/sa4604/CV-surrogate/results/loss_curves/loss_curves.svg
