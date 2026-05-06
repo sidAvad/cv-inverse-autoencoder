@@ -124,6 +124,8 @@ def main() -> None:
                         help="Number of epochs to train (default: N_EPOCHS). "
                              "When resuming, this is additional epochs on top of the checkpoint.")
     args = parser.parse_args()
+    if args.dry_run:
+        args.run_name = f"{args.run_name}_dry-run"
     setup_logging(args.run_name)
 
     print(f"Run: {args.run_name}")

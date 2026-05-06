@@ -5,7 +5,5 @@ __pycache__/
 norm_stats.json
 logs/
 checkpoints/
-notebooks/
-results/**/*.svg
-results/provenance.log
+notebooks/__marimo__/
 .DS_Store

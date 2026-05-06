@@ -10,7 +10,7 @@ Prerequisites:
     - A trained decoder checkpoint must exist in checkpoints/<decoder-run>/.
 
 Dry-run (smoke-test, finishes in seconds):
-    python train_encoder.py --decoder-run weighted-bce --run-name enc_dry-run --dry-run
+    python train_autoencoder.py --decoder-run baseline --run-name autoenc-baseline --dry-run
 """
 
 import argparse
@@ -135,6 +135,8 @@ def main() -> None:
                         help="Number of epochs to train (default: N_EPOCHS). "
                              "Additional epochs if resuming.")
     args = parser.parse_args()
+    if args.dry_run:
+        args.run_name = f"{args.run_name}_dry-run"
     setup_logging(args.run_name)
 
     print(f"Run: {args.run_name}")
