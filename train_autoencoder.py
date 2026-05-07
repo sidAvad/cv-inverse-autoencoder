@@ -66,7 +66,8 @@ class _Tee:
 def setup_logging(run_name: str) -> None:
     LOG_DIR.mkdir(exist_ok=True)
     tag = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_path = LOG_DIR / f"train_{run_name}_{tag}.log"
+    log_name = run_name.replace("/", "-")
+    log_path = LOG_DIR / f"train_{log_name}_{tag}.log"
     log_file = open(log_path, "w", buffering=1)
     sys.stdout = _Tee(sys.__stdout__, log_file)
     print(f"Logging to {log_path}")
