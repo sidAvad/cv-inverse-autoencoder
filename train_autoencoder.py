@@ -261,7 +261,8 @@ def main() -> None:
            f"  {'Val':>10} {'V-cont':>10} {'V-valve':>10}")
     print(f"\n{hdr}")
     print("-" * len(hdr))
-
+    best_val_loss  = float("inf")
+    best_ckpt_path = None
     for epoch in range(start_epoch, start_epoch + n_epochs):
         t_total, t_cont, t_valve = run_epoch(
             encoder, decoder, train_loader, loss_fn, device, optimizer, scheduler
@@ -270,12 +271,17 @@ def main() -> None:
             encoder, decoder, val_loader, loss_fn, device
         )
 
+        improved = v_total < best_val_loss
         print(
             f"{epoch:<6} {t_total:>10.6f} {t_cont:>10.6f} {t_valve:>10.6f}"
             f"  {v_total:>10.6f} {v_cont:>10.6f} {v_valve:>10.6f}"
+            + ("  *" if improved else "")
         )
 
-        if not is_dry:
+        if not is_dry and improved:
+            if best_ckpt_path is not None:
+                best_ckpt_path.unlink(missing_ok=True)
+            best_ckpt_path = run_dir / f"checkpoint_{epoch:03d}.pt"
             torch.save(
                 {
                     "epoch":           epoch,
@@ -286,8 +292,9 @@ def main() -> None:
                     "optimizer_state": optimizer.state_dict(),
                     "val_loss":        v_total,
                 },
-                run_dir / f"checkpoint_{epoch:03d}.pt",
+                best_ckpt_path,
             )
+            best_val_loss = v_total
 
     if is_dry:
         print("Dry-run complete — checkpoints not saved.")
