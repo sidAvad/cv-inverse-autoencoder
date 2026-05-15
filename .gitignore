@@ -1,9 +1,7 @@
 .venv/
 __pycache__/
 *.pyc
-*.pt
 norm_stats.json
-logs/
-checkpoints/
+dry-runs/
 notebooks/__marimo__/
 .DS_Store

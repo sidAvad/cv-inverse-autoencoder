@@ -41,7 +41,18 @@ def _():
     from model import CVSurrogate
     from encoder import CVEncoder
 
-    return CVDataset, CVEncoder, CVSurrogate, DataLoader, Path, ROOT, json, np, plt, torch
+    return (
+        CVDataset,
+        CVEncoder,
+        CVSurrogate,
+        DataLoader,
+        Path,
+        ROOT,
+        json,
+        np,
+        plt,
+        torch,
+    )
 
 
 @app.cell
@@ -82,7 +93,17 @@ def _(mo):
 
 
 @app.cell
-def _(CVEncoder, CVSurrogate, ENCODER_CKPT, MANIFEST, ROOT, STATS_PATH, device, json, torch):
+def _(
+    CVEncoder,
+    CVSurrogate,
+    ENCODER_CKPT,
+    MANIFEST,
+    ROOT,
+    STATS_PATH,
+    device,
+    json,
+    torch,
+):
     enc_ckpt = torch.load(ENCODER_CKPT, map_location=device)
 
     encoder = CVEncoder().to(device)
@@ -102,7 +123,7 @@ def _(CVEncoder, CVSurrogate, ENCODER_CKPT, MANIFEST, ROOT, STATS_PATH, device, 
         stats = json.load(f)
     with open(MANIFEST) as f:
         manifest = json.load(f)
-    return dec_ckpt, decoder, enc_ckpt, encoder, manifest, stats
+    return decoder, enc_ckpt, encoder, manifest, stats
 
 
 @app.cell(hide_code=True)
@@ -185,7 +206,7 @@ def _(WAVE_NAMES_CONT, gt_phys, np, pred_phys):
     print('-' * 56)
     for i, _name in enumerate(WAVE_NAMES_CONT):
         print(f'{_name:<8} {ch_mae[i]:>10.4f} {ch_med_ae[i]:>10.4f} {ch_mape[i]:>10.2f} {ch_rne[i]:>14.2f}')
-    return ch_mae, ch_med_ae, ch_mape, ch_rne, sim_ch_mae, sim_ch_rne
+    return ch_mae, ch_mape, ch_med_ae, sim_ch_mae, sim_ch_rne
 
 
 @app.cell(hide_code=True)
@@ -197,7 +218,16 @@ def _(mo):
 
 
 @app.cell
-def _(N_SIMS, WAVE_NAMES_CONT, ch_mae, ch_med_ae, enc_ckpt, np, plt, sim_ch_mae):
+def _(
+    N_SIMS,
+    WAVE_NAMES_CONT,
+    ch_mae,
+    ch_med_ae,
+    enc_ckpt,
+    np,
+    plt,
+    sim_ch_mae,
+):
     x = np.arange(len(WAVE_NAMES_CONT))
     _fig, _axes = plt.subplots(1, 3, figsize=(22, 5))
 
@@ -244,7 +274,7 @@ def _(mo):
 
 
 @app.cell
-def _(N_SIMS, WAVE_NAMES_CONT, ch_mape, ch_rne, enc_ckpt, plt, sim_ch_rne, x):
+def _(N_SIMS, WAVE_NAMES_CONT, ch_mape, enc_ckpt, plt, sim_ch_rne, x):
     _fig, _axes = plt.subplots(1, 2, figsize=(18, 5))
 
     _axes[0].bar(x, ch_mape, color='tomato', alpha=0.8)
@@ -336,7 +366,16 @@ def _(SIM_INDICES, WAVE_NAMES_CONT, enc_ckpt, gt_conts, plt, pred_conts, t):
 
 
 @app.cell
-def _(SIM_INDICES, VALVE_NAMES, enc_ckpt, gt_valves, ncols, plt, pred_valves, t):
+def _(
+    SIM_INDICES,
+    VALVE_NAMES,
+    enc_ckpt,
+    gt_valves,
+    ncols,
+    plt,
+    pred_valves,
+    t,
+):
     _fig, _axes = plt.subplots(4, ncols, figsize=(6 * ncols, 8), sharex=True)
     for _col, _idx in enumerate(SIM_INDICES):
         for _row, _name in enumerate(VALVE_NAMES):

@@ -5,12 +5,16 @@ Prerequisites:
     - Run compute_stats.py first to produce norm_stats.json.
     - manifest_train.json must exist one level above DATA_DIR.
 
-Dry-run (smoke-test, finishes in seconds):
-    python train.py --dry-run
+Usage:
+    python train.py --run-name exp_baseline
+    python train.py --run-name dry-run_baseline   # smoke-test, finishes in seconds
+
+Run names must start with 'exp_' (saved to outputs/) or 'dry-run_' (saved to dry-runs/).
 """
 
 import argparse
 import json
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -30,8 +34,8 @@ DATA_DIR      = Path("/media/8TBNVME/data/neh10/hdf5/cv8/simset_10M_cv8Eed_20260
 MANIFEST_PATH = DATA_DIR.parent / "manifest_train.json"
 STATS_PATH    = Path("norm_stats.json")
 
-N_SIMS       = 1_000_000  # entries drawn from manifest
-N_VAL        = 100_000    # first N_VAL entries -> validation
+N_SIMS       = 1_000_000
+N_VAL        = 100_000
 N_TRAIN      = N_SIMS - N_VAL
 
 BATCH_SIZE   = 512
@@ -41,6 +45,25 @@ GRAD_CLIP    = 1.0
 N_EPOCHS     = 10
 NUM_WORKERS  = 16
 DRY_RUN_SIMS = 128
+
+
+# ─── Run directory ────────────────────────────────────────────────────────────
+
+def resolve_run_dir(run_name: str) -> Path:
+    if run_name.startswith("exp_"):
+        return Path("outputs") / run_name
+    if run_name.startswith("dry-run_"):
+        return Path("dry-runs") / run_name
+    raise ValueError(f"--run-name must start with 'exp_' or 'dry-run_'; got: {run_name!r}")
+
+
+def _git_hash() -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
+        ).decode().strip()
+    except Exception:
+        return "unknown"
 
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
@@ -55,14 +78,11 @@ class _Tee:
         for s in self._streams:
             s.flush()
 
-LOG_DIR        = Path("logs")
-CHECKPOINT_DIR = Path("checkpoints")
 
-def setup_logging(run_name: str) -> None:
-    LOG_DIR.mkdir(exist_ok=True)
-    tag = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_name = run_name.replace("/", "-")
-    log_path = LOG_DIR / f"train_{log_name}_{tag}.log"
+def setup_logging(run_dir: Path) -> None:
+    run_dir.mkdir(parents=True, exist_ok=True)
+    date_tag = datetime.now().strftime("%Y%m%d")
+    log_path = run_dir / f"train_log_{date_tag}.log"
     log_file = open(log_path, "w", buffering=1)
     sys.stdout = _Tee(sys.__stdout__, log_file)
     print(f"Logging to {log_path}")
@@ -115,21 +135,21 @@ def run_epoch(model, loader, loss_fn, device, optimizer=None, scheduler=None):
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-name", required=True,
-                        help="Name for this run. Checkpoints go to checkpoints/<run-name>/, "
-                             "log to logs/train_<run-name>_<timestamp>.log.")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Smoke-test: tiny dataset, 1 epoch, 0 workers.")
+                        help="Name for this run, must start with 'exp_' or 'dry-run_'. "
+                             "exp_ runs save to outputs/<run-name>/; "
+                             "dry-run_ runs save to dry-runs/<run-name>/ and skip checkpoints.")
     parser.add_argument("--resume", type=Path, default=None, metavar="CHECKPOINT",
                         help="Resume training from this checkpoint .pt file.")
     parser.add_argument("--n-epochs", type=int, default=None,
                         help="Number of epochs to train (default: N_EPOCHS). "
                              "When resuming, this is additional epochs on top of the checkpoint.")
     args = parser.parse_args()
-    if args.dry_run:
-        args.run_name = f"{args.run_name}_dry-run"
-    setup_logging(args.run_name)
 
-    print(f"Run: {args.run_name}")
+    is_dry    = args.run_name.startswith("dry-run_")
+    run_dir   = resolve_run_dir(args.run_name)
+    setup_logging(run_dir)
+
+    print(f"Run: {args.run_name}  ({'dry-run' if is_dry else 'full'})")
 
     # ── Prerequisites ──────────────────────────────────────────────────
     if not STATS_PATH.exists():
@@ -142,16 +162,14 @@ def main() -> None:
         stats = json.load(f)
     print(f"Loaded stats from {STATS_PATH}")
 
-    # ── Load manifest and slice first N_SIMS entries ───────────────────
+    # ── Load manifest ──────────────────────────────────────────────────
     with open(MANIFEST_PATH) as f:
         manifest = json.load(f)
-    n_sims = DRY_RUN_SIMS if args.dry_run else N_SIMS
+    n_sims = DRY_RUN_SIMS if is_dry else N_SIMS
     index  = manifest["index"][:n_sims]
     print(f"Manifest: {len(index):,} entries selected")
 
-    # Sequential split: first N_VAL -> val, remainder -> train.
-    # DataLoader shuffle handles randomisation within the train split.
-    n_val       = len(index) // 2 if args.dry_run else N_VAL
+    n_val       = len(index) // 2 if is_dry else N_VAL
     val_index   = index[:n_val]
     train_index = index[n_val:]
     print(f"  train: {len(train_index):,}   val: {len(val_index):,}")
@@ -162,9 +180,9 @@ def main() -> None:
 
     loader_kwargs = dict(
         batch_size         = BATCH_SIZE,
-        num_workers        = 0 if args.dry_run else NUM_WORKERS,
+        num_workers        = 0 if is_dry else NUM_WORKERS,
         pin_memory         = True,
-        persistent_workers = False if args.dry_run else True,
+        persistent_workers = False if is_dry else True,
     )
     train_loader = DataLoader(train_ds, shuffle=True,  **loader_kwargs)
     val_loader   = DataLoader(val_ds,   shuffle=False, **loader_kwargs)
@@ -179,7 +197,7 @@ def main() -> None:
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Trainable parameters: {n_params:,}")
 
-    n_epochs    = 1 if args.dry_run else (args.n_epochs or N_EPOCHS)
+    n_epochs    = 1 if is_dry else (args.n_epochs or N_EPOCHS)
     start_epoch = 1
     optimizer   = AdamW(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
     scheduler   = CosineAnnealingLR(optimizer, T_max=n_epochs, eta_min=LR / 100)
@@ -190,6 +208,31 @@ def main() -> None:
         optimizer.load_state_dict(ckpt["optimizer_state"])
         start_epoch = ckpt["epoch"] + 1
         print(f"Resumed from {args.resume} (epoch {ckpt['epoch']}, val_loss={ckpt['val_loss']:.6f})")
+
+    # ── run_info.json ──────────────────────────────────────────────────
+    run_info = {
+        "run":       args.run_name,
+        "type":      "dry-run" if is_dry else "exp",
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "script":    str(Path(__file__).resolve()),
+        "git_hash":  _git_hash(),
+        "device":    str(device),
+        "data": {
+            "n_sims":   n_sims,
+            "data_dir": str(DATA_DIR),
+            "manifest": str(MANIFEST_PATH),
+        },
+        "training": {
+            "batch_size":   BATCH_SIZE,
+            "lr":           LR,
+            "weight_decay": WEIGHT_DECAY,
+            "n_epochs":     n_epochs,
+            "grad_clip":    GRAD_CLIP,
+        },
+    }
+    with open(run_dir / "run_info.json", "w") as f:
+        json.dump(run_info, f, indent=2)
+    print(f"run_info.json written  git={run_info['git_hash']}")
 
     # ── Training loop ──────────────────────────────────────────────────
     hdr = (f"{'Epoch':<6} {'Train':>10} {'T-cont':>10} {'T-valve':>10}"
@@ -209,18 +252,20 @@ def main() -> None:
             f"  {v_total:>10.6f} {v_cont:>10.6f} {v_valve:>10.6f}"
         )
 
-        ckpt_dir = CHECKPOINT_DIR / args.run_name
-        ckpt_dir.mkdir(parents=True, exist_ok=True)
-        torch.save(
-            {
-                "epoch":           epoch,
-                "run_name":        args.run_name,
-                "model_state":     model.state_dict(),
-                "optimizer_state": optimizer.state_dict(),
-                "val_loss":        v_total,
-            },
-            ckpt_dir / f"checkpoint_{epoch:03d}.pt",
-        )
+        if not is_dry:
+            torch.save(
+                {
+                    "epoch":           epoch,
+                    "run_name":        args.run_name,
+                    "model_state":     model.state_dict(),
+                    "optimizer_state": optimizer.state_dict(),
+                    "val_loss":        v_total,
+                },
+                run_dir / f"checkpoint_{epoch:03d}.pt",
+            )
+
+    if is_dry:
+        print("Dry-run complete — checkpoints not saved.")
 
     train_ds.close()
     val_ds.close()
