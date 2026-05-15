@@ -26,7 +26,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
 
 from dataset import CVDataset
-from model import CVSurrogate, CVLoss
+from decoder import CVSurrogate, CVLoss
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 
